@@ -12,18 +12,18 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jwhited/wgsd/cmd/wgsd-client/wgctrl"
 	"github.com/miekg/dns"
-	"golang.zx2c4.com/wireguard/wgctrl"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
 
 var (
-	deviceFlag = flag.String("device", "",
-		"name of Wireguard device to manage")
-	dnsServerFlag = flag.String("dns", "",
-		"ip:port of DNS server")
-	dnsZoneFlag = flag.String("zone", "", "dns zone name")
-	serviceFlag = flag.String("service", "", "service ip or public key")
+	deviceFlag    = flag.String("device", "", "name of Wireguard device to manage")
+	dnsServerFlag = flag.String("dns", "", "ip:port of DNS server")
+	dnsZoneFlag   = flag.String("zone", "", "dns zone name")
+	serviceFlag   = flag.String("service", "", "service ip or public key")
+	socketPath    = flag.String("socket", "/run/vpp/api.sock", "path of vpp API socket")
+	dataplane     = flag.String("dataplane", "linux", "dataplane (linux/vpp)")
 )
 
 const (
@@ -34,19 +34,22 @@ const (
 func main() {
 	flag.Parse()
 	if len(*deviceFlag) < 1 {
+		flag.PrintDefaults()
 		log.Fatal("missing device flag")
 	}
 	if len(*dnsZoneFlag) < 1 {
+		flag.PrintDefaults()
 		log.Fatal("missing zone flag")
 	}
 	if len(*dnsServerFlag) < 1 {
+		flag.PrintDefaults()
 		log.Fatal("missing dns flag")
 	}
 	_, _, err := net.SplitHostPort(*dnsServerFlag)
 	if err != nil {
 		log.Fatalf("invalid dns flag value: %v", err)
 	}
-	wgClient, err := wgctrl.New()
+	wgClient, err := wgctrl.New(*dataplane, *socketPath)
 	if err != nil {
 		log.Fatalf("error constructing Wireguard control client: %v",
 			err)
@@ -121,7 +124,7 @@ func main() {
 	}
 }
 
-func ConnectPeer(ctx context.Context, wgClient *wgctrl.Client, wgDevice *wgtypes.Device, dnsClient *dns.Client, serviceFqdn string, dnsServer string) {
+func ConnectPeer(ctx context.Context, wgClient wgctrl.WgClient, wgDevice *wgctrl.WgDevice, dnsClient *dns.Client, serviceFqdn string, dnsServer string) {
 	srvCtx, srvCancel := context.WithCancel(ctx)
 	m := &dns.Msg{}
 	m.SetQuestion(serviceFqdn, dns.TypeSRV)
@@ -193,25 +196,12 @@ func ConnectPeer(ctx context.Context, wgClient *wgctrl.Client, wgDevice *wgtypes
 		return
 	}
 
-	peerConfig := wgtypes.PeerConfig{
+	err = wgClient.AddPeer(wgDevice, &wgctrl.WgPeer{
 		PublicKey:  pubKeyWg,
-		UpdateOnly: false,
-		Endpoint: &net.UDPAddr{
-			IP:   endpointIP,
-			Port: int(srv.Port),
-		},
-		ReplaceAllowedIPs: true,
-		AllowedIPs:        []net.IPNet{*allowedIPs},
-	}
-	deviceConfig := wgtypes.Config{
-		PrivateKey:   &wgDevice.PrivateKey,
-		ReplacePeers: false,
-		Peers:        []wgtypes.PeerConfig{peerConfig},
-	}
-	if wgDevice.FirewallMark > 0 {
-		deviceConfig.FirewallMark = &wgDevice.FirewallMark
-	}
-	err = wgClient.ConfigureDevice(*deviceFlag, deviceConfig)
+		Addr:       endpointIP,
+		Port:       int(srv.Port),
+		AllowedIPs: []net.IPNet{*allowedIPs},
+	})
 	if err != nil {
 		log.Printf(
 			"[%s] failed to configure peer on %s, error: %v",

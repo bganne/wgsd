@@ -1,11 +1,34 @@
 Quick start instructions
 
+Install go-1.14:
+~# sudo apt install golang-1.14
+~# export PATH=/usr/lib/go-1.14/bin:$PATH
+
 Clone & build wgsd:
-~# go get github.com/jwhited/wgsd
+~# go get -d github.com/jwhited/wgsd
+~# cd ~/go/src/github.com/jwhited/wgsd
+~# git remote add bganne https://github.com/bganne/wgsd
+~# git fetch bganne
+~# git checkout bganne/master
+~# export VPP_DIR=$PWD/vpp
+~# (cd vagrant && ./clone_vpp.sh $VPP_DIR)
+~# go get git.fd.io/govpp.git@v0.3.6-0.20201002143632-c2456559a661
+~# ./vpplink/binapi/generate_binapi.sh
+~# go get ./cmd/coredns ./cmd/wgsd-client
 
 Start and provision VMs with Vagrant:
-~# cd ~/go/src/github.com/jwhited/wgsd/vagrant
+~# cd vagrant
 ~# vagrant up
 
 Setup Wireguard Mesh:
 ~# ./setup.sh
+
+Start iperf servers on client-1 (Linux) and client-3 (VPP):
+~# vagrant ssh client-1 -- iperf -u -s
+~# vagrant ssh client-3 -- iperf -u -s
+
+Linux -> Linux benchark:
+~# vagrant ssh client-2 -- iperf -u -c 192.168.100.101 -i1 -b10G
+
+VPP -> VPP benchmark:
+~# vagrant ssh client-4 -- iperf -u -c 192.168.100.103 -i1 -b10G

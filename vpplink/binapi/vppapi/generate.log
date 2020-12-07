@@ -1,0 +1,7 @@
+VPP Version                 : 21.01-rc0~479-ga0024b802
+Binapi-generator version    : govpp v0.4.0-dev
+VPP Base commit             : 2df2f75ec tests: remove ip_punt from vpp_papi_provider and add ip_punt object models
+------------------ Cherry picked commits --------------------
+a0024b802 wireguard: run feature after gso
+430d53279 wireguard: return public key in api
+-------------------------------------------------------------
